@@ -1,48 +1,58 @@
-version: ‘3’
+version: '3'
 
 services:
-  mariadb:
-    container_name: mariadb			# Le nom du container, oui vraiment.
-    networks:
-    - inception            			# à quel network il appartient
-    build: 
-    context: requirements/mariadb 	# ou se trouve son Dockerfile
-    dockerfile: Dockerfile			# le nom du Dockerfile ?!
-    env_file: .env                  # le fichier d'environnement pour transmettre les variables
-    volumes:                        # Voir plus bas
-    - mariadb:/var/lib/mysql
-    restart: unless-stopped         # redémarre tant qu'il n'est pas stoppé 
-    expose:                         # le port à exposer
-    - "3306"
-
   nginx:
     container_name: nginx
-    volumes:
-    - wordpress:/var/www/wordpress
-    networks:
-    - inception
-    depends_on:        			 # Nouvelle ligne, indiquant de ne pas démarrer NGINX tant que WordPress n'a pas démarré.
-    - wordpress
-    build: 
-    context: requirements/nginx
-    dockerfile: Dockerfile
-    env_file: .env
+    build: ./requirements/nginx
     ports:
-    - "443:443" 		# on indique le port qui sera exposé a la machine locale
-    restart: on-failure 		# Ici nous changeons, le container redémarrera uniquement en cas de crash.
+      - 443:443
+    volumes:
+      - wordpress_data:/var/www/html
+    restart: always
+    networks:
+      - network
+
+  mariadb:
+    container_name: mariadb
+    build: ./requirements/mariadb
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - network
+    restart: always
+    env_file:
+      - .env
 
   wordpress:
     container_name: wordpress
-    env_file: .env
+    #Create a depedency between the 2 container, db will be launched before
+    depends_on:
+      - mariadb
+    build:
+      context: ./requirements/wordpress
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - .env
     volumes:
-    - wordpress:/var/www/wordpress
+      - wordpress_data:/var/www/html
     networks:
-    - inception
-    build: 
-    context: requirements/wordpress
-    dockerfile: Dockerfile
-    depends_on:    					# WordPress démarrera uniquement après MariaDB (sinon il ne pourra pas configurer la base de données...)
-    - mariadb
-    restart: on-failure
-    expose: 
-    - "9000" 			
+      - network
+
+volumes:
+  mariadb_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /home/vbachele/data/mysql
+      o: bind
+  wordpress_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /home/vbachele/data/wordpress
+      o: bind
+
+networks:
+  network:
+    driver: bridge
